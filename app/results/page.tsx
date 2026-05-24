@@ -1,4 +1,3 @@
-// app/results/page.tsx
 "use client";
 
 import { useEffect, useState } from "react";
@@ -26,8 +25,12 @@ export default function ResultsPage() {
   const [summary, setSummary] = useState<AuditSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
+  const [companyName, setCompanyName] = useState("");
+  const [role, setRole] = useState("");
   const [captured, setCaptured] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [formData, setFormData] = useState<StoredFormData | null>(null);
 
   useEffect(() => {
     const stored = sessionStorage.getItem("audit-data");
@@ -36,6 +39,8 @@ export default function ResultsPage() {
       return;
     }
     const data: StoredFormData = JSON.parse(stored);
+    setFormData(data);
+
     const tools = data.tools
       .filter((t) => t.enabled)
       .map((t) => ({
@@ -66,23 +71,40 @@ export default function ResultsPage() {
     if (!email || !email.includes("@")) return;
     setCapturing(true);
     try {
-      await fetch("/api/capture", {
+      const captureRes = await fetch("/api/capture", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
-          auditData: summary,
+          companyName: companyName || null,
+          role: role || null,
+          teamSize: formData?.teamSize,
+          auditResults: summary,
           totalSavings: summary?.totalMonthlySavings,
         }),
       });
+      const responseData = await captureRes.json();
+      if (!captureRes.ok || !responseData.shareId) {
+        throw new Error(responseData.error || "Failed to get share ID");
+      }
+      const shareId = responseData.shareId;
+      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
+      const shareableUrl = `${baseUrl}/share/${shareId}`;
+      setShareUrl(shareableUrl);
+
       await fetch("/api/send-email", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, savings: summary?.totalMonthlySavings }),
+        body: JSON.stringify({
+          email,
+          savings: summary?.totalMonthlySavings,
+          shareUrl: shareableUrl,
+        }),
       });
       setCaptured(true);
     } catch (err) {
       console.error(err);
+      alert("Something went wrong. Please try again.");
     } finally {
       setCapturing(false);
     }
@@ -119,37 +141,76 @@ export default function ResultsPage() {
               <p className="text-sm">
                 Credex can help you save even more with discounted credits.
               </p>
-              <Button className="mt-2">Book a consultation</Button>
             </div>
           )}
 
-          {summary.optimalCase && (
-            <div className="bg-blue-100 border border-blue-300 rounded-lg p-4 mb-6 text-center">
-              <p className="font-bold">✅ You&apos;re spending well!</p>
-              <p className="text-sm">
-                Get notified when new optimizations apply to your stack.
+          {!captured ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+              <h3 className="font-semibold text-lg mb-2">
+                Get your shareable report
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Enter your email to receive a shareable link and a copy of these
+                savings.
               </p>
-              {!captured ? (
-                <div className="mt-4 max-w-sm mx-auto">
-                  <Label htmlFor="email">Email address</Label>
-                  <div className="flex gap-2 mt-1">
+              <div className="space-y-3">
+                <div>
+                  <Label htmlFor="email">Email *</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="you@example.com"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label htmlFor="company">Company (optional)</Label>
                     <Input
-                      id="email"
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      id="company"
+                      type="text"
+                      placeholder="Acme Inc."
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
                     />
-                    <Button onClick={handleCapture} disabled={capturing}>
-                      {capturing ? "Sending..." : "Notify me"}
-                    </Button>
+                  </div>
+                  <div>
+                    <Label htmlFor="role">Role (optional)</Label>
+                    <Input
+                      id="role"
+                      type="text"
+                      placeholder="CTO, Founder, ..."
+                      value={role}
+                      onChange={(e) => setRole(e.target.value)}
+                    />
                   </div>
                 </div>
-              ) : (
-                <p className="text-sm text-green-700 mt-2">
-                  Thanks! We&apos;ll be in touch.
-                </p>
-              )}
+                <Button
+                  onClick={handleCapture}
+                  disabled={capturing}
+                  className="w-full"
+                >
+                  {capturing ? "Sending..." : "Get my shareable report →"}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 text-center">
+              <p className="font-bold text-green-700">
+                ✅ Report sent to {email}!
+              </p>
+              <p className="text-sm mt-1">
+                Share your savings with colleagues:
+              </p>
+              <a
+                href={shareUrl}
+                target="_blank"
+                className="text-blue-600 underline break-all"
+              >
+                {shareUrl}
+              </a>
             </div>
           )}
 
