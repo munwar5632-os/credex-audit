@@ -31,6 +31,7 @@ export default function ResultsPage() {
   const [capturing, setCapturing] = useState(false);
   const [shareUrl, setShareUrl] = useState("");
   const [formData, setFormData] = useState<StoredFormData | null>(null);
+  const [aiSummary, setAiSummary] = useState("");
 
   useEffect(() => {
     const stored = sessionStorage.getItem("audit-data");
@@ -67,7 +68,34 @@ export default function ResultsPage() {
       .catch(() => setLoading(false));
   }, [router]);
 
+  // Fetch AI summary when audit results are ready
+  useEffect(() => {
+    if (summary) {
+      fetch("/api/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ auditSummary: summary }),
+      })
+        .then((res) => res.json())
+        .then((data) => setAiSummary(data.summary))
+        .catch(() =>
+          setAiSummary(
+            "We've analyzed your spending. See the breakdown above for savings opportunities.",
+          ),
+        );
+    }
+  }, [summary]);
+
   const handleCapture = async () => {
+    // Honeypot check: hidden field must be empty
+    const honeypot = (
+      document.querySelector('input[name="honeypot"]') as HTMLInputElement
+    )?.value;
+    if (honeypot) {
+      console.log("Bot detected – ignoring");
+      return;
+    }
+
     if (!email || !email.includes("@")) return;
     setCapturing(true);
     try {
@@ -133,6 +161,13 @@ export default function ResultsPage() {
             </p>
           </div>
 
+          {/* AI‑generated summary (or fallback) */}
+          {aiSummary && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-gray-700">{aiSummary}</p>
+            </div>
+          )}
+
           {summary.highSavingsCase && (
             <div className="bg-green-100 border border-green-300 rounded-lg p-4 mb-6 text-center">
               <p className="font-bold">
@@ -146,6 +181,15 @@ export default function ResultsPage() {
 
           {!captured ? (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+              {/* Honeypot field – hidden from users */}
+              <div style={{ display: "none" }}>
+                <input
+                  type="text"
+                  name="honeypot"
+                  tabIndex={-1}
+                  autoComplete="off"
+                />
+              </div>
               <h3 className="font-semibold text-lg mb-2">
                 Get your shareable report
               </h3>
