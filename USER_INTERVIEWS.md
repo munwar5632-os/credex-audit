@@ -1,4 +1,4 @@
-## Interview 1 – [Name], [Role] at [Company Name]
+## Interview 1 –  Munwar Shaik, Developer (self-interview)
 
 **When:** 2026-05-21
 
